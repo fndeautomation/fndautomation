@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* FND Corporate Theme — Navy/Steel-Blue */
+    --background: 210 20% 98%;
+    --foreground: 213 40% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 213 40% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 213 40% 12%;
+
+    /* Primary: steel-blue */
+    --primary: 213 72% 28%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 213 20% 94%;
+    --secondary-foreground: 213 40% 20%;
+
+    --muted: 213 15% 93%;
+    --muted-foreground: 213 20% 48%;
+
+    --accent: 213 30% 88%;
+    --accent-foreground: 213 72% 28%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 213 15% 88%;
+    --input: 213 15% 88%;
+    --ring: 213 72% 28%;
+
+    /* Status colors */
+    --status-pending: 38 92% 50%;
+    --status-active: 142 71% 45%;
+    --status-rejected: 0 84% 60%;
+    --status-completed: 213 72% 35%;
+
+    --radius: 0.5rem;
+
+    --chart-1: 213 72% 35%;
+    --chart-2: 142 71% 45%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 0 84% 60%;
+    --chart-5: 213 40% 60%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  #root {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 4px;
+  }
+}
+
+/* FND Loader animations */
+@keyframes fnd-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.96); }
+}
+
+@keyframes fnd-progress {
+  0% { width: 0%; }
+  40% { width: 60%; }
+  80% { width: 85%; }
+  100% { width: 100%; }
+}
+
+@keyframes fnd-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fnd-pulse { animation: fnd-pulse 2s ease-in-out infinite; }
+.animate-fnd-progress { animation: fnd-progress 1.8s ease-in-out forwards; }
+.animate-fnd-fade-in { animation: fnd-fade-in 0.4s ease-out forwards; }
+.animate-slide-up { animation: slide-up 0.3s ease-out forwards; }
