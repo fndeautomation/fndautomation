@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -35,6 +35,7 @@ export default function AcceptInvitePage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const isCompletingRef = useRef(false);
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -43,6 +44,7 @@ export default function AcceptInvitePage() {
   useEffect(() => {
     // Supabase auto-handles the hash fragment and signs in the user
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (isCompletingRef.current) return;
       (async () => {
         if (event === 'SIGNED_IN' && session) {
           setInviteReady(true);
@@ -69,26 +71,37 @@ export default function AcceptInvitePage() {
 
   const onSubmit = async (data: FormData) => {
     setLoading(true);
-    const { data: updateData, error } = await supabase.auth.updateUser({
-      password: data.password,
-    });
+    isCompletingRef.current = true;
+    try {
+      const { data: updateData, error } = await supabase.auth.updateUser({
+        password: data.password,
+      });
 
-    if (error || !updateData.user) {
-      toast({ title: 'Error', description: error?.message ?? 'Failed to set password', variant: 'destructive' });
+      if (error || !updateData.user) {
+        isCompletingRef.current = false;
+        toast({ title: 'Error', description: error?.message ?? 'Failed to set password', variant: 'destructive' });
+        setLoading(false);
+        return;
+      }
+
+      // Update profile status to active
+      await supabase
+        .from('profiles')
+        .update({ status: 'active' })
+        .eq('id', updateData.user.id);
+
+      // Sign out to clear the temporary invite session
+      await supabase.auth.signOut();
+
       setLoading(false);
-      return;
+      setDone(true);
+
+      setTimeout(() => navigate('/login', { replace: true }), 2000);
+    } catch (err: any) {
+      isCompletingRef.current = false;
+      toast({ title: 'Error', description: err.message || 'An unexpected error occurred.', variant: 'destructive' });
+      setLoading(false);
     }
-
-    // Update profile status to active
-    await supabase
-      .from('profiles')
-      .update({ status: 'active' })
-      .eq('id', updateData.user.id);
-
-    setLoading(false);
-    setDone(true);
-
-    setTimeout(() => navigate('/', { replace: true }), 1500);
   };
 
   if (checking) return <FNDLoader />;
@@ -100,16 +113,15 @@ export default function AcceptInvitePage() {
           <img
             src="/assets/images/Gemini_Generated_Image_dx05judx05judx05.png"
             alt="FND"
-            className="h-10 w-10 object-contain"
+            className="h-24 w-24 object-contain"
           />
-          <span className="text-xl font-bold text-primary">FND</span>
         </div>
 
         {done ? (
           <div className="text-center space-y-3">
             <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
             <h2 className="text-xl font-bold">Account activated!</h2>
-            <p className="text-muted-foreground text-sm">Redirecting you to your dashboard…</p>
+            <p className="text-muted-foreground text-sm">Redirecting to login…</p>
           </div>
         ) : !inviteReady ? (
           <div className="text-center space-y-3">

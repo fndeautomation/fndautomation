@@ -94,15 +94,10 @@ function Sidebar({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
     <div className="flex flex-col h-full bg-primary text-white">
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-white/10">
-        <img
-          src="/assets/images/Gemini_Generated_Image_dx05judx05judx05.png"
-          alt="FND"
-          className="h-9 w-9 object-contain brightness-0 invert shrink-0"
-        />
         <div className="min-w-0">
           <div className="font-bold text-base tracking-wide leading-none">FND</div>
-          <div className="text-[10px] text-blue-200 tracking-widest uppercase mt-0.5 truncate">
-            Fahim, Nanji & D'souza
+          <div className="text-[8px] text-blue-200 tracking-widest uppercase mt-0.5 truncate">
+            Fahim, Nanji & D'souza Pvt Ltd
           </div>
         </div>
       </div>

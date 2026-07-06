@@ -52,11 +52,6 @@ export default function LoginPage() {
       {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 bg-primary flex-col justify-between p-12 text-white">
         <div className="flex items-center gap-3">
-          <img
-            src="/assets/images/Gemini_Generated_Image_dx05judx05judx05.png"
-            alt="FND Logo"
-            className="h-12 w-12 object-contain brightness-0 invert"
-          />
           <div>
             <div className="text-xl font-bold tracking-wide">FND</div>
             <div className="text-xs text-blue-200 tracking-widest uppercase">Fahim, Nanji & D'souza</div>

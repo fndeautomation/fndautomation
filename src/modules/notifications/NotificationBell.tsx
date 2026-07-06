@@ -51,13 +51,21 @@ export default function NotificationBell() {
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'notifications',
           filter: `recipient_id=eq.${user.id}`,
         },
         (payload) => {
-          setNotifications(prev => [payload.new as Notification, ...prev]);
+          if (payload.eventType === 'INSERT') {
+            setNotifications(prev => [payload.new as Notification, ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            const updated = payload.new as Notification;
+            setNotifications(prev => prev.map(n => n.id === updated.id ? updated : n));
+          } else if (payload.eventType === 'DELETE') {
+            const deletedId = (payload.old as { id: string }).id;
+            setNotifications(prev => prev.filter(n => n.id !== deletedId));
+          }
         }
       )
       .subscribe();
