@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Loader2, UserPlus } from 'lucide-react';
-import { supabase, SUPABASE_URL } from '../../../lib/supabase';
+import { supabaseAdmin } from '../../../lib/supabase';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
@@ -56,21 +56,69 @@ export default function CreateUserDialog({ onCreated }: Props) {
   const onSubmit = async (data: FormData) => {
     setLoading(true);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
+      if (!supabaseAdmin) {
+        toast({
+          title: 'Error',
+          description: 'VITE_SUPABASE_SERVICE_ROLE_KEY is missing in your .env file.',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
 
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/invite-user`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(data),
+      // 1. Check if profile exists
+      const { data: existing } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('email', data.email)
+        .maybeSingle();
+
+      if (existing) {
+        toast({ title: 'Error', description: 'A user with this email already exists', variant: 'destructive' });
+        setLoading(false);
+        return;
+      }
+
+      // 2. Invite user via auth
+      const origin = window.location.origin;
+      const redirectTo = `${origin}/accept-invite`;
+
+      const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+        data.email,
+        {
+          redirectTo,
+          data: {
+            full_name: data.full_name,
+            role: data.role,
+            label: data.label,
+          },
+        }
+      );
+
+      if (inviteError || !inviteData?.user) {
+        toast({
+          title: 'Failed to invite user',
+          description: inviteError?.message || 'Invite failed',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
+      // 3. Create profile
+      const { error: profileError } = await supabaseAdmin.from('profiles').insert({
+        id: inviteData.user.id,
+        full_name: data.full_name,
+        email: data.email,
+        role: data.role,
+        label: data.label,
+        status: 'pending',
       });
 
-      const json = await res.json();
-      if (!res.ok) {
-        toast({ title: 'Failed to invite user', description: json.error, variant: 'destructive' });
+      if (profileError) {
+        // rollback
+        await supabaseAdmin.auth.admin.deleteUser(inviteData.user.id);
+        toast({ title: 'Failed to create profile', description: profileError.message, variant: 'destructive' });
         setLoading(false);
         return;
       }
@@ -79,8 +127,12 @@ export default function CreateUserDialog({ onCreated }: Props) {
       reset();
       setOpen(false);
       onCreated();
-    } catch {
-      toast({ title: 'Network error', description: 'Could not send the invite.', variant: 'destructive' });
+    } catch (err: any) {
+      toast({
+        title: 'Network error',
+        description: err.message || 'Could not send the invite.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }

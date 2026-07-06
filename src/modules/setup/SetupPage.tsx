@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Loader2, CheckCircle, Eye, EyeOff } from 'lucide-react';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../../lib/supabase';
+import { supabaseAdmin } from '../../lib/supabase';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -41,30 +41,78 @@ export default function SetupPage() {
   const onSubmit = async (data: FormData) => {
     setLoading(true);
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/setup-admin`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          full_name: data.full_name,
-          email: data.email,
-          password: data.password,
-        }),
+      if (!supabaseAdmin) {
+        toast({
+          title: 'Setup failed',
+          description: 'VITE_SUPABASE_SERVICE_ROLE_KEY is missing in your .env file.',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
+      // 1. Check if admin exists
+      const { data: existingAdmin, error: checkError } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('role', 'admin')
+        .maybeSingle();
+
+      if (checkError) {
+        toast({ title: 'Database error', description: checkError.message, variant: 'destructive' });
+        setLoading(false);
+        return;
+      }
+
+      if (existingAdmin) {
+        toast({ title: 'Setup failed', description: 'Admin account already exists.', variant: 'destructive' });
+        setLoading(false);
+        return;
+      }
+
+      // 2. Create user in auth
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: data.email,
+        password: data.password,
+        email_confirm: true,
       });
 
-      const json = await res.json();
-      if (!res.ok) {
-        toast({ title: 'Setup failed', description: json.error, variant: 'destructive' });
+      if (authError || !authData?.user) {
+        toast({
+          title: 'Authentication error',
+          description: authError?.message || 'Failed to create user',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
+      // 3. Create profile
+      const { error: profileError } = await supabaseAdmin.from('profiles').insert({
+        id: authData.user.id,
+        full_name: data.full_name,
+        email: data.email,
+        role: 'admin',
+        label: 'Administrator',
+        status: 'active',
+      });
+
+      if (profileError) {
+        // rollback user creation
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+        toast({ title: 'Profile creation failed', description: profileError.message, variant: 'destructive' });
         setLoading(false);
         return;
       }
 
       setDone(true);
       setTimeout(() => navigate('/login', { replace: true }), 2000);
-    } catch {
-      toast({ title: 'Network error', description: 'Could not reach the server.', variant: 'destructive' });
+    } catch (err: any) {
+      toast({
+        title: 'Network error',
+        description: err.message || 'Could not reach the server.',
+        variant: 'destructive',
+      });
       setLoading(false);
     }
   };
