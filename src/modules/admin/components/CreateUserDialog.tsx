@@ -80,7 +80,7 @@ export default function CreateUserDialog({ onCreated }: Props) {
       }
 
       // 2. Invite user via auth
-      const origin = window.location.origin;
+      const origin = import.meta.env.VITE_APP_URL || window.location.origin;
       const redirectTo = `${origin}/accept-invite`;
 
       const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
