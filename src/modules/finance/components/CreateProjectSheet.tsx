@@ -70,9 +70,15 @@ export default function CreateProjectSheet({ open, onOpenChange, onCreated }: Pr
   const milestones = watch('milestones');
   const totalValue = watch('total_value') || 0;
 
-  const totalPct = milestones?.reduce((s, m) => s + (Number(m.percentage) || 0), 0) ?? 0;
-  const remaining = 100 - totalPct;
-  const pctOk = Math.abs(totalPct - 100) < 0.01;
+  const lastMilestonePct = milestones?.length > 0 ? (Number(milestones[milestones.length - 1].percentage) || 0) : 0;
+  const isIncreasing = milestones?.every((m, i) => {
+    const val = Number(m.percentage) || 0;
+    if (i === 0) return val > 0 && val <= 100;
+    const prevVal = Number(milestones[i - 1].percentage) || 0;
+    return val > prevVal && val <= 100;
+  }) ?? true;
+
+  const pctOk = isIncreasing && milestones?.length > 0;
 
   useEffect(() => {
     supabase
@@ -85,7 +91,11 @@ export default function CreateProjectSheet({ open, onOpenChange, onCreated }: Pr
 
   const onSubmit = async (data: FormData) => {
     if (!pctOk) {
-      toast({ title: 'Invalid milestones', description: 'Percentages must sum to exactly 100%.', variant: 'destructive' });
+      toast({
+        title: 'Invalid milestones',
+        description: 'Milestones must be in strictly increasing order (cumulative progress) and cannot exceed 100%.',
+        variant: 'destructive',
+      });
       return;
     }
     if (!user) return;
@@ -106,14 +116,18 @@ export default function CreateProjectSheet({ open, onOpenChange, onCreated }: Pr
 
       if (projectError || !project) throw new Error(projectError?.message ?? 'Failed to create project');
 
-      const milestonesToInsert = data.milestones.map((m, i) => ({
-        project_id: project.id,
-        title: m.title,
-        percentage: m.percentage,
-        value: Math.round((data.total_value * m.percentage / 100) * 100) / 100,
-        order_index: i,
-        status: 'pending' as const,
-      }));
+      const milestonesToInsert = data.milestones.map((m, i) => {
+        const prevPct = i === 0 ? 0 : data.milestones[i - 1].percentage;
+        const incPct = m.percentage - prevPct;
+        return {
+          project_id: project.id,
+          title: m.title,
+          percentage: m.percentage,
+          value: Math.round((data.total_value * incPct / 100) * 100) / 100,
+          order_index: i,
+          status: 'pending' as const,
+        };
+      });
 
       const { error: msError } = await supabase.from('milestones').insert(milestonesToInsert);
       if (msError) throw new Error(msError.message);
@@ -200,26 +214,28 @@ export default function CreateProjectSheet({ open, onOpenChange, onCreated }: Pr
             {/* Progress bar */}
             <div className="mb-4 space-y-1.5">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Allocated</span>
-                <span className={pctOk ? 'text-green-600 font-semibold' : totalPct > 100 ? 'text-destructive font-semibold' : 'text-amber-600 font-semibold'}>
-                  {totalPct.toFixed(1)}% {!pctOk && `— ${remaining > 0 ? `${remaining.toFixed(1)}% remaining` : `${Math.abs(remaining).toFixed(1)}% over`}`}
+                <span className="text-muted-foreground">Cumulative Target</span>
+                <span className={pctOk ? 'text-green-600 font-semibold' : 'text-destructive font-semibold'}>
+                  {lastMilestonePct.toFixed(1)}% {!pctOk && '— Invalid sequence'}
                   {pctOk && ' ✓'}
                 </span>
               </div>
-              <Progress value={Math.min(totalPct, 100)} className="h-2" />
+              <Progress value={Math.min(lastMilestonePct, 100)} className="h-2" />
             </div>
 
             {!pctOk && (
               <div className="flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 text-xs mb-3">
                 <AlertCircle size={13} />
-                Milestones must sum to exactly 100% before saving.
+                Milestones must be in strictly increasing order (cumulative progress) and cannot exceed 100%.
               </div>
             )}
 
             <div className="space-y-3">
               {fields.map((field, i) => {
                 const pct = Number(milestones?.[i]?.percentage) || 0;
-                const val = totalValue > 0 ? (totalValue * pct / 100) : 0;
+                const prevPct = i === 0 ? 0 : (Number(milestones?.[i - 1]?.percentage) || 0);
+                const incPct = Math.max(0, pct - prevPct);
+                const val = totalValue > 0 ? (totalValue * incPct / 100) : 0;
                 return (
                   <div key={field.id} className="flex items-start gap-3 p-3 rounded-lg border bg-muted/20">
                     <div className="flex-1 space-y-2">
@@ -234,15 +250,15 @@ export default function CreateProjectSheet({ open, onOpenChange, onCreated }: Pr
                             min="0.1"
                             max="100"
                             step="0.1"
-                            placeholder="% share"
-                            className="w-24"
+                            placeholder="Cumulative %"
+                            className="w-28"
                             {...register(`milestones.${i}.percentage`, { valueAsNumber: true })}
                           />
-                          <span className="text-muted-foreground text-sm">%</span>
+                          <span className="text-muted-foreground text-xs font-medium">Cumulative %</span>
                         </div>
-                        {val > 0 && (
+                        {pct > 0 && (
                           <span className="text-xs text-muted-foreground font-mono">
-                            = PKR {formatPKR(val)}
+                            = PKR {formatPKR(val)} (Share: {incPct.toFixed(1)}%)
                           </span>
                         )}
                       </div>

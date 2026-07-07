@@ -96,8 +96,8 @@ function Sidebar({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
       <div className="flex items-center gap-3 px-4 py-5 border-b border-white/10">
         <div className="min-w-0">
           <div className="font-bold text-base tracking-wide leading-none">FND</div>
-          <div className="text-[8px] text-blue-200 tracking-widest uppercase mt-0.5 truncate">
-            Fahim, Nanji & D'souza Pvt Ltd
+          <div className="text-[8px] text-blue-200 tracking-widest mt-0.5 truncate">
+            Fahim, Nanji & DeSouza Pvt Ltd
           </div>
         </div>
       </div>

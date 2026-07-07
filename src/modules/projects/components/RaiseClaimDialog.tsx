@@ -11,14 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '../../../components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../../components/ui/select';
-import { Label } from '../../../components/ui/label';
+
 import { useToast } from '../../../hooks/use-toast';
 
 function formatPKR(v: number) {
@@ -28,27 +21,26 @@ function formatPKR(v: number) {
 interface Props {
   project: Project;
   milestone: Milestone;
-  engineers: ProjectEngineer[];
+  engineers?: ProjectEngineer[];
   onRaised: () => void;
 }
 
-export default function RaiseClaimDialog({ project, milestone, engineers, onRaised }: Props) {
+export default function RaiseClaimDialog({ project, milestone, onRaised }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [engineerId, setEngineerId] = useState('');
   const [loading, setLoading] = useState(false);
 
   const canRaise = milestone.status === 'pending' || milestone.status === 'claim_submitted';
 
   const onSubmit = async () => {
-    if (!engineerId || !user) return;
+    if (!user) return;
     setLoading(true);
 
     const { error: claimError } = await supabase.from('claims').insert({
       project_id: project.id,
       milestone_id: milestone.id,
-      project_engineer_id: engineerId,
+      project_engineer_id: null,
       raised_by: user.id,
       status: 'pending_review',
       amount: milestone.value,
@@ -77,7 +69,6 @@ export default function RaiseClaimDialog({ project, milestone, engineers, onRais
 
     toast({ title: 'Claim submitted!', description: `${milestone.title} — ${formatPKR(milestone.value)}` });
     setOpen(false);
-    setEngineerId('');
     onRaised();
     setLoading(false);
   };
@@ -103,30 +94,9 @@ export default function RaiseClaimDialog({ project, milestone, engineers, onRais
             <p className="text-sm text-muted-foreground">{milestone.percentage}% · <span className="font-mono">{formatPKR(milestone.value)}</span></p>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Assign engineer</Label>
-            {engineers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No engineers added to this project yet.</p>
-            ) : (
-              <Select value={engineerId} onValueChange={setEngineerId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select engineer…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {engineers.map(e => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.engineer_name}
-                      <span className="ml-1.5 text-muted-foreground text-xs">({e.engineer_role_tag})</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={onSubmit} disabled={!engineerId || loading || engineers.length === 0}>
+            <Button onClick={onSubmit} disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Submit Claim
             </Button>

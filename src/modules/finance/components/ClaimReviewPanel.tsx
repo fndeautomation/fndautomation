@@ -196,29 +196,20 @@ export default function ClaimReviewPanel({ claimId, onUpdated }: Props) {
       </div>
 
       {/* Details grid */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <div className="bg-muted/40 rounded-lg p-3">
           <p className="text-xs text-muted-foreground mb-1">Amount</p>
-          <p className="font-semibold text-foreground font-mono">{formatPKR(claim.amount)}</p>
-        </div>
-        <div className="bg-muted/40 rounded-lg p-3">
-          <p className="text-xs text-muted-foreground mb-1">Engineer</p>
-          <p className="font-medium text-foreground text-sm">
-            {(claim.engineer as { engineer_name?: string })?.engineer_name ?? '—'}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {(claim.engineer as { engineer_role_tag?: string })?.engineer_role_tag}
-          </p>
+          <p className="font-semibold text-foreground font-mono text-xs">{formatPKR(claim.amount)}</p>
         </div>
         <div className="bg-muted/40 rounded-lg p-3">
           <p className="text-xs text-muted-foreground mb-1">Raised by</p>
-          <p className="font-medium text-sm">{(claim.raised_by_profile as { full_name?: string })?.full_name}</p>
-          <p className="text-xs text-muted-foreground">{(claim.raised_by_profile as { label?: string })?.label}</p>
+          <p className="font-medium text-foreground text-xs truncate">{(claim.raised_by_profile as { full_name?: string })?.full_name}</p>
+          <p className="text-xs text-muted-foreground truncate">{(claim.raised_by_profile as { label?: string })?.label}</p>
         </div>
         <div className="bg-muted/40 rounded-lg p-3">
           <p className="text-xs text-muted-foreground mb-1">Submitted</p>
-          <p className="font-medium text-sm">{format(new Date(claim.created_at), 'dd MMM yyyy')}</p>
-          <p className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(claim.created_at), { addSuffix: true })}</p>
+          <p className="font-medium text-foreground text-xs truncate">{format(new Date(claim.created_at), 'dd MMM yyyy')}</p>
+          <p className="text-xs text-muted-foreground truncate">{formatDistanceToNow(new Date(claim.created_at), { addSuffix: true })}</p>
         </div>
       </div>
 

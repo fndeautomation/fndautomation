@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Routes, Route, Navigate } from 'react-router-dom';
 import { Users, Briefcase, Search, RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Profile, Project } from '../../types/database';
@@ -7,9 +7,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/ta
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import StatusBadge from '../../components/shared/StatusBadge';
 import EmptyState from '../../components/shared/EmptyState';
 import CreateUserDialog from './components/CreateUserDialog';
+import ProjectDetailPage from '../projects/ProjectDetailPage';
 import { formatDistanceToNow } from 'date-fns';
 
 function formatPKR(v: number) {
@@ -21,7 +23,7 @@ interface ProjectRow extends Project {
   assigned_to_profile?: Pick<Profile, 'full_name' | 'label'> | null;
 }
 
-export default function AdminDashboard() {
+function AdminDashboardContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const tab = location.pathname.includes('/projects') ? 'projects' : 'users';
@@ -30,6 +32,8 @@ export default function AdminDashboard() {
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [userSearch, setUserSearch] = useState('');
   const [projectSearch, setProjectSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [assignedFilter, setAssignedFilter] = useState('all');
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingProjects, setLoadingProjects] = useState(false);
 
@@ -61,10 +65,14 @@ export default function AdminDashboard() {
     u.email.toLowerCase().includes(userSearch.toLowerCase())
   );
 
-  const filteredProjects = projects.filter(p =>
-    p.name.toLowerCase().includes(projectSearch.toLowerCase()) ||
-    p.short_id.toLowerCase().includes(projectSearch.toLowerCase())
-  );
+  const filteredProjects = projects.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(projectSearch.toLowerCase()) ||
+      p.short_id.toLowerCase().includes(projectSearch.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
+    const matchesAssigned = assignedFilter === 'all' || 
+      (assignedFilter === 'unassigned' ? !p.assigned_to : p.assigned_to === assignedFilter);
+    return matchesSearch && matchesStatus && matchesAssigned;
+  });
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -154,14 +162,36 @@ export default function AdminDashboard() {
         {/* PROJECTS TAB */}
         <TabsContent value="projects">
           <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-            <div className="relative flex-1 max-w-sm">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="pl-8"
-                placeholder="Search by name or ID…"
-                value={projectSearch}
-                onChange={e => setProjectSearch(e.target.value)}
-              />
+            <div className="flex items-center gap-2 flex-1 max-w-2xl flex-wrap">
+              <div className="relative min-w-[200px] flex-1">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="pl-8"
+                  placeholder="Search by name or ID…"
+                  value={projectSearch}
+                  onChange={e => setProjectSearch(e.target.value)}
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[150px]"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="on_hold">On Hold</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={assignedFilter} onValueChange={setAssignedFilter}>
+                <SelectTrigger className="w-[180px]"><SelectValue placeholder="All Directors/PMs" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Directors/PMs</SelectItem>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  {users.filter(u => u.role === 'director_pm' && u.status === 'active').map(u => (
+                    <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button variant="ghost" size="icon" onClick={fetchProjects} disabled={loadingProjects}>
               <RefreshCw size={15} className={loadingProjects ? 'animate-spin' : ''} />
@@ -188,7 +218,11 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody>
                   {filteredProjects.map(p => (
-                    <tr key={p.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                    <tr
+                      key={p.id}
+                      className="border-b last:border-0 hover:bg-muted/20 transition-colors cursor-pointer"
+                      onClick={() => navigate(`/admin/projects/${p.id}`)}
+                    >
                       <td className="px-4 py-3">
                         <span className="font-mono text-xs text-primary font-semibold">{p.short_id}</span>
                       </td>
@@ -218,5 +252,16 @@ export default function AdminDashboard() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+export default function AdminDashboard() {
+  return (
+    <Routes>
+      <Route path="users" element={<AdminDashboardContent />} />
+      <Route path="projects" element={<AdminDashboardContent />} />
+      <Route path="projects/:id" element={<ProjectDetailPage />} />
+      <Route path="*" element={<Navigate to="users" replace />} />
+    </Routes>
   );
 }

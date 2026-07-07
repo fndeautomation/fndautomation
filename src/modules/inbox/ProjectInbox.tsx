@@ -77,9 +77,19 @@ export default function ProjectInbox({ projectId }: { projectId: string }) {
     });
 
     if (!error) {
-      // Notify other participants
-      // FO notifies Director; Director notifies all FOs
-      if (profile?.role === 'director_pm') {
+      if (profile?.role === 'admin') {
+        const { data: proj } = await supabase.from('projects').select('assigned_to').eq('id', projectId).maybeSingle();
+        const { data: fos } = await supabase.from('profiles').select('id').eq('role', 'finance_officer');
+        const recipients = [...(fos?.map(f => f.id) ?? [])];
+        if (proj?.assigned_to) {
+          recipients.push(proj.assigned_to);
+        }
+        if (recipients.length) {
+          await supabase.from('notifications').insert(
+            recipients.map(rId => ({ recipient_id: rId, type: 'new_message' as const, reference_id: projectId }))
+          );
+        }
+      } else if (profile?.role === 'director_pm') {
         const { data: fos } = await supabase.from('profiles').select('id').eq('role', 'finance_officer');
         if (fos?.length) {
           await supabase.from('notifications').insert(

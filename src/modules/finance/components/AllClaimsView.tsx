@@ -73,8 +73,7 @@ export default function AllClaimsView() {
     const q = search.toLowerCase();
     const matchSearch = !q ||
       c.project?.name?.toLowerCase().includes(q) ||
-      c.project?.short_id?.toLowerCase().includes(q) ||
-      c.engineer?.engineer_name?.toLowerCase().includes(q);
+      c.project?.short_id?.toLowerCase().includes(q);
     return matchStatus && matchSearch;
   });
 
@@ -101,7 +100,7 @@ export default function AllClaimsView() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-8"
-            placeholder="Search by project or engineer…"
+            placeholder="Search by project name or ID…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -120,7 +119,7 @@ export default function AllClaimsView() {
 
       {loading ? (
         <div className="space-y-2">
-          {[1,2,3].map(i => <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />)}
+          {[1, 2, 3].map(i => <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />)}
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState
@@ -135,7 +134,6 @@ export default function AllClaimsView() {
               <tr className="bg-muted/50 border-b">
                 <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Project</th>
                 <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide hidden sm:table-cell">Milestone</th>
-                <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide hidden md:table-cell">Engineer</th>
                 <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide hidden md:table-cell">Amount</th>
                 <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Status</th>
                 <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide hidden lg:table-cell">Submitted</th>
@@ -153,10 +151,6 @@ export default function AllClaimsView() {
                     <div className="font-medium text-foreground text-xs mt-0.5">{c.project?.name}</div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground text-xs hidden sm:table-cell">{c.milestone?.title}</td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <div className="text-sm">{c.engineer?.engineer_name}</div>
-                    <div className="text-xs text-muted-foreground">{c.engineer?.engineer_role_tag}</div>
-                  </td>
                   <td className="px-4 py-3 font-mono text-xs text-muted-foreground hidden md:table-cell">
                     {formatPKR(c.amount)}
                   </td>

@@ -95,12 +95,20 @@ export default function NotificationBell() {
     setOpen(false);
     if (n.reference_id) {
       const role = profile?.role;
-      if (n.type === 'project_assigned' || n.type === 'new_message') {
-        const base = role === 'finance_officer' ? '/finance' : '/director';
+      if (n.type === 'new_message') {
+        const base = role === 'admin' ? '/admin' : role === 'finance_officer' ? '/finance' : '/director';
+        navigate(`${base}/projects/${n.reference_id}?tab=inbox`);
+      } else if (n.type === 'project_assigned') {
+        const base = role === 'admin' ? '/admin' : role === 'finance_officer' ? '/finance' : '/director';
         navigate(`${base}/projects/${n.reference_id}`);
       } else if (['claim_raised', 'claim_approved', 'claim_rejected', 'claim_commented'].includes(n.type)) {
-        if (role === 'finance_officer') navigate('/finance/claims');
-        else navigate(`/director/projects`);
+        if (role === 'admin') {
+          navigate('/admin/projects');
+        } else if (role === 'finance_officer') {
+          navigate('/finance/claims');
+        } else {
+          navigate(`/director/projects`);
+        }
       }
     }
   };
@@ -109,10 +117,10 @@ export default function NotificationBell() {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative h-9 w-9">
-          <Bell className="h-4.5 w-4.5" />
+          <Bell size={18} />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 h-4.5 w-4.5 rounded-full bg-destructive text-[10px] font-bold text-white flex items-center justify-center">
-              {unreadCount > 9 ? '9+' : unreadCount}
+            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-[9px] font-bold text-white flex items-center justify-center leading-none border border-background">
+              {unreadCount}
             </span>
           )}
         </Button>

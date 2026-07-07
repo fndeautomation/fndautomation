@@ -105,6 +105,21 @@ export interface Notification {
   created_at: string;
 }
 
+export interface ProjectDocument {
+  id: string;
+  project_id: string;
+  name: string;
+  file_path: string;
+  size: number;
+  mime_type: string | null;
+  uploaded_by: string;
+  created_at: string;
+}
+
+export interface ProjectDocumentWithProfile extends ProjectDocument {
+  uploaded_by_profile?: Pick<Profile, 'full_name' | 'label'>;
+}
+
 // Supabase Database type map for typed client
 export interface Database {
   public: {
@@ -156,6 +171,11 @@ export interface Database {
           is_read?: boolean;
         };
         Update: Partial<Pick<Notification, 'is_read'>>;
+      };
+      project_documents: {
+        Row: ProjectDocument;
+        Insert: Omit<ProjectDocument, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<Omit<ProjectDocument, 'id' | 'project_id' | 'created_at'>>;
       };
     };
     Functions: {

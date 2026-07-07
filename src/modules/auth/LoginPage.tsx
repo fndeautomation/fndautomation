@@ -54,7 +54,7 @@ export default function LoginPage() {
         <div className="flex items-center gap-3">
           <div>
             <div className="text-xl font-bold tracking-wide">FND</div>
-            <div className="text-xs text-blue-200 tracking-widest uppercase">Fahim, Nanji & D'souza</div>
+            <div className="text-xs text-blue-200 tracking-widest">Fahim, Nanji & DeSouza</div>
           </div>
         </div>
         <div>

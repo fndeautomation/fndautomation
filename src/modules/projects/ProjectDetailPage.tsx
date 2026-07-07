@@ -1,28 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Loader2, UserPlus, HardHat, DollarSign } from 'lucide-react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Loader2, DollarSign, FileText, File, Download, Trash2, Paperclip, UploadCloud } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../auth/AuthContext';
-import type { Project, Milestone, ProjectEngineer, Claim, Profile } from '../../types/database';
+import type { Project, Milestone, Claim, Profile, ProjectDocumentWithProfile } from '../../types/database';
 import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
 import { Badge } from '../../components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '../../components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../components/ui/select';
 import StatusBadge from '../../components/shared/StatusBadge';
 import MilestoneProgressBar from './components/MilestoneProgressBar';
 import RaiseClaimDialog from './components/RaiseClaimDialog';
@@ -37,20 +22,43 @@ function formatPKR(v: number) {
   return new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', maximumFractionDigits: 0 }).format(v);
 }
 
-const ENGINEER_ROLE_TAGS = [
-  'Site Engineer',
-  'MEP Engineer',
-  'MEP Lead',
-  'Electrical Engineer',
-  'Mechanical Engineer',
-  'Civil Engineer',
-  'Project Supervisor',
-  'Site Foreman',
-];
+function formatBytes(bytes: number, decimals = 2) {
+  if (!+bytes) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+
+function getFileIcon(name: string) {
+  const ext = name.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'pdf':
+      return <FileText className="text-red-500" size={20} />;
+    case 'doc':
+    case 'docx':
+      return <FileText className="text-blue-500" size={20} />;
+    case 'xls':
+    case 'xlsx':
+    case 'csv':
+      return <FileText className="text-green-500" size={20} />;
+    case 'zip':
+    case 'rar':
+      return <File className="text-amber-500" size={20} />;
+    case 'jpg':
+    case 'jpeg':
+    case 'png':
+    case 'gif':
+    case 'svg':
+      return <File className="text-purple-500" size={20} />;
+    default:
+      return <File className="text-slate-500" size={20} />;
+  }
+}
 
 interface ClaimWithDetails extends Claim {
   milestone?: Milestone;
-  engineer?: Pick<ProjectEngineer, 'engineer_name' | 'engineer_role_tag'>;
   raised_by_profile?: Pick<Profile, 'full_name' | 'label'>;
 }
 
@@ -60,61 +68,142 @@ export default function ProjectDetailPage() {
   const { profile } = useAuth();
   const { toast } = useToast();
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'milestones';
+  const setActiveTab = (val: string) => {
+    setSearchParams({ tab: val });
+  };
+
   const [project, setProject] = useState<Project & { assigned_to_profile?: Pick<Profile, 'full_name' | 'label'> } | null>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
-  const [engineers, setEngineers] = useState<ProjectEngineer[]>([]);
   const [claims, setClaims] = useState<ClaimWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [addEngineerOpen, setAddEngineerOpen] = useState(false);
-  const [engineerName, setEngineerName] = useState('');
-  const [engineerRole, setEngineerRole] = useState('');
-  const [addingEngineer, setAddingEngineer] = useState(false);
-
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<ProjectDocumentWithProfile[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const isDirector = profile?.role === 'director_pm';
   const isFinance = profile?.role === 'finance_officer';
-  const backPath = isDirector ? '/director/projects' : '/finance/projects';
+  const isAdmin = profile?.role === 'admin';
+  const backPath = isAdmin ? '/admin/projects' : isDirector ? '/director/projects' : '/finance/projects';
 
   const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
 
-    const [{ data: proj }, { data: ms }, { data: engs }, { data: cls }] = await Promise.all([
+    const [{ data: proj }, { data: ms }, { data: cls }, { data: docs }] = await Promise.all([
       supabase.from('projects').select('*, assigned_to_profile:assigned_to(full_name, label)').eq('id', id).maybeSingle(),
       supabase.from('milestones').select('*').eq('project_id', id).order('order_index'),
-      supabase.from('project_engineers').select('*').eq('project_id', id).order('created_at'),
-      supabase.from('claims').select('*, milestone:milestone_id(*), engineer:project_engineer_id(engineer_name, engineer_role_tag), raised_by_profile:raised_by(full_name, label)').eq('project_id', id).order('created_at', { ascending: false }),
+      supabase.from('claims').select('*, milestone:milestone_id(*), raised_by_profile:raised_by(full_name, label)').eq('project_id', id).order('created_at', { ascending: false }),
+      supabase.from('project_documents').select('*, uploaded_by_profile:uploaded_by(full_name, label)').eq('project_id', id).order('created_at', { ascending: false }),
     ]);
 
     setProject(proj as typeof project);
     setMilestones((ms as Milestone[]) ?? []);
-    setEngineers((engs as ProjectEngineer[]) ?? []);
     setClaims((cls as ClaimWithDetails[]) ?? []);
+    setDocuments((docs as ProjectDocumentWithProfile[]) ?? []);
     setLoading(false);
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
 
-  const addEngineer = async () => {
-    if (!engineerName.trim() || !engineerRole || !id || !profile) return;
-    setAddingEngineer(true);
-    const { error } = await supabase.from('project_engineers').insert({
-      project_id: id,
-      engineer_name: engineerName.trim(),
-      engineer_role_tag: engineerRole,
-      added_by: profile.id,
-    });
-    setAddingEngineer(false);
-    if (!error) {
-      setEngineerName('');
-      setEngineerRole('');
-      setAddEngineerOpen(false);
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !id || !profile) return;
+
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const uniqueId = Math.random().toString(36).substring(2, 15) + '_' + Date.now();
+      const storageFilePath = `${id}/${uniqueId}.${fileExt}`;
+
+      // 1. Upload file to Supabase storage
+      const { error: uploadError } = await supabase.storage
+        .from('project-documents')
+        .upload(storageFilePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // 2. Insert metadata into public.project_documents table
+      const { error: dbError } = await supabase.from('project_documents').insert({
+        project_id: id,
+        name: file.name,
+        file_path: storageFilePath,
+        size: file.size,
+        mime_type: file.type || null,
+        uploaded_by: profile.id,
+      });
+
+      if (dbError) throw dbError;
+
+      toast({ title: 'Success', description: 'Document uploaded successfully.' });
       load();
-      toast({ title: 'Engineer added' });
-    } else {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } catch (err) {
+      const error = err as Error;
+      toast({
+        title: 'Upload failed',
+        description: error.message || 'An error occurred during file upload.',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploading(false);
+      // Reset the file input value
+      e.target.value = '';
+    }
+  };
+
+  const handleDownload = async (filePath: string) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('project-documents')
+        .createSignedUrl(filePath, 60);
+
+      if (error) throw error;
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank');
+      }
+    } catch (err) {
+      const error = err as Error;
+      toast({
+        title: 'Download failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteDocument = async (docId: string, filePath: string) => {
+    if (!confirm('Are you sure you want to delete this document?')) return;
+    setDeletingId(docId);
+    try {
+      // 1. Delete from Storage
+      const { error: storageError } = await supabase.storage
+        .from('project-documents')
+        .remove([filePath]);
+
+      if (storageError) throw storageError;
+
+      // 2. Delete from database table
+      const { error: dbError } = await supabase
+        .from('project_documents')
+        .delete()
+        .eq('id', docId);
+
+      if (dbError) throw dbError;
+
+      toast({ title: 'Success', description: 'Document deleted successfully.' });
+      load();
+    } catch (err) {
+      const error = err as Error;
+      toast({
+        title: 'Delete failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -169,52 +258,11 @@ export default function ProjectDetailPage() {
             <span>{format(new Date(project.created_at), 'dd MMM yyyy')}</span>
           </div>
         </div>
-        {isDirector && (
-          <Dialog open={addEngineerOpen} onOpenChange={setAddEngineerOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                <UserPlus size={14} className="mr-1.5" /> Add Engineer
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-sm">
-              <DialogHeader>
-                <DialogTitle>Add Engineer</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 mt-2">
-                <div className="space-y-1.5">
-                  <Label>Engineer name</Label>
-                  <Input
-                    placeholder="e.g. Hamza Iqbal"
-                    value={engineerName}
-                    onChange={e => setEngineerName(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Discipline / Role</Label>
-                  <Select value={engineerRole} onValueChange={setEngineerRole}>
-                    <SelectTrigger><SelectValue placeholder="Select role…" /></SelectTrigger>
-                    <SelectContent>
-                      {ENGINEER_ROLE_TAGS.map(t => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setAddEngineerOpen(false)}>Cancel</Button>
-                  <Button onClick={addEngineer} disabled={!engineerName.trim() || !engineerRole || addingEngineer}>
-                    {addingEngineer && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Add Engineer
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-        )}
+
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="bg-card border rounded-lg p-3">
           <p className="text-xs text-muted-foreground mb-0.5">Milestones</p>
           <p className="font-semibold text-lg">{milestones.length}</p>
@@ -222,10 +270,6 @@ export default function ProjectDetailPage() {
         <div className="bg-card border rounded-lg p-3">
           <p className="text-xs text-muted-foreground mb-0.5">Paid</p>
           <p className="font-semibold text-lg text-primary">{paidMs}/{milestones.length}</p>
-        </div>
-        <div className="bg-card border rounded-lg p-3">
-          <p className="text-xs text-muted-foreground mb-0.5">Engineers</p>
-          <p className="font-semibold text-lg">{engineers.length}</p>
         </div>
         <div className="bg-card border rounded-lg p-3">
           <p className="text-xs text-muted-foreground mb-0.5">Pending Claims</p>
@@ -250,15 +294,9 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      <Tabs defaultValue="milestones">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4">
           <TabsTrigger value="milestones">Milestones</TabsTrigger>
-          <TabsTrigger value="engineers">
-            Engineers
-            {engineers.length > 0 && (
-              <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">{engineers.length}</Badge>
-            )}
-          </TabsTrigger>
           <TabsTrigger value="claims">
             Claims
             {pendingClaims > 0 && (
@@ -299,11 +337,10 @@ export default function ProjectDetailPage() {
                           )}
                         </div>
                       </div>
-                      {isDirector && (
+                      {(isDirector || isAdmin) && (
                         <RaiseClaimDialog
                           project={project}
                           milestone={m}
-                          engineers={engineers}
                           onRaised={load}
                         />
                       )}
@@ -315,42 +352,7 @@ export default function ProjectDetailPage() {
           )}
         </TabsContent>
 
-        {/* ENGINEERS */}
-        <TabsContent value="engineers">
-          {engineers.length === 0 ? (
-            <div className="text-center py-8">
-              <HardHat className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">No engineers assigned yet.</p>
-              {isDirector && (
-                <Button variant="outline" size="sm" className="mt-3" onClick={() => setAddEngineerOpen(true)}>
-                  <UserPlus size={13} className="mr-1.5" /> Add Engineer
-                </Button>
-              )}
-            </div>
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {engineers.map(e => (
-                <div key={e.id} className="border rounded-lg p-3 bg-card flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <HardHat size={16} className="text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">{e.engineer_name}</p>
-                    <p className="text-xs text-muted-foreground">{e.engineer_role_tag}</p>
-                  </div>
-                </div>
-              ))}
-              {isDirector && (
-                <button
-                  onClick={() => setAddEngineerOpen(true)}
-                  className="border-2 border-dashed border-border rounded-lg p-3 flex items-center justify-center gap-2 text-muted-foreground hover:border-primary hover:text-primary transition-colors text-sm"
-                >
-                  <Plus size={14} /> Add engineer
-                </button>
-              )}
-            </div>
-          )}
-        </TabsContent>
+
 
         {/* CLAIMS */}
         <TabsContent value="claims">
@@ -365,7 +367,7 @@ export default function ProjectDetailPage() {
                 <div
                   key={c.id}
                   className="border rounded-lg p-4 bg-card hover:bg-muted/20 transition-colors cursor-pointer"
-                  onClick={() => isFinance ? setSelectedClaimId(c.id) : undefined}
+                  onClick={() => (isFinance || isAdmin) ? setSelectedClaimId(c.id) : undefined}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1">
@@ -376,12 +378,10 @@ export default function ProjectDetailPage() {
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
                         <span className="font-mono">{formatPKR(c.amount)}</span>
                         <span>·</span>
-                        <span>{(c.engineer as ProjectEngineer)?.engineer_name}</span>
-                        <span>·</span>
                         <span>{formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}</span>
                       </div>
                     </div>
-                    {isFinance && c.status === 'pending_review' && (
+                    {(isFinance || isAdmin) && c.status === 'pending_review' && (
                       <Button size="sm" variant="outline" onClick={() => setSelectedClaimId(c.id)}>
                         Review
                       </Button>
@@ -398,6 +398,113 @@ export default function ProjectDetailPage() {
           <ProjectInbox projectId={project.id} />
         </TabsContent>
       </Tabs>
+
+      {/* Documents Section */}
+      <div className="mt-8 pt-8 border-t">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+              <Paperclip size={18} className="text-primary" />
+              Project Documents
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Official documents and references uploaded for this project.
+            </p>
+          </div>
+          {(isFinance || isAdmin) && (
+            <div>
+              <Label
+                htmlFor="file-upload"
+                className={cn(
+                  "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-4 py-2 cursor-pointer gap-1.5",
+                  uploading && "opacity-50 pointer-events-none"
+                )}
+              >
+                {uploading ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <UploadCloud size={15} />
+                )}
+                {uploading ? 'Uploading...' : 'Upload Document'}
+              </Label>
+              <input
+                id="file-upload"
+                type="file"
+                className="hidden"
+                onChange={handleFileUpload}
+                disabled={uploading}
+              />
+            </div>
+          )}
+        </div>
+
+        {documents.length === 0 ? (
+          <div className="border border-dashed rounded-lg p-8 text-center text-muted-foreground flex flex-col items-center justify-center">
+            <Paperclip size={32} className="text-muted-foreground/30 mb-2" />
+            <p className="text-sm font-medium">No documents uploaded yet.</p>
+            {(isFinance || isAdmin) && (
+              <p className="text-xs mt-1">Upload files such as project plans, invoices, or specifications.</p>
+            )}
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {documents.map((doc) => (
+              <div
+                key={doc.id}
+                className="group border rounded-lg p-3 bg-card hover:bg-muted/30 transition-all duration-200 flex items-center justify-between gap-3 shadow-sm hover:shadow-md"
+              >
+                <div
+                  className="flex items-center gap-3 min-w-0 cursor-pointer flex-1"
+                  onClick={() => handleDownload(doc.file_path)}
+                >
+                  <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-200">
+                    {getFileIcon(doc.name)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm truncate text-foreground group-hover:text-primary transition-colors duration-200">
+                      {doc.name}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                      <span>{formatBytes(doc.size)}</span>
+                      <span>·</span>
+                      <span className="truncate">
+                        by {doc.uploaded_by_profile?.full_name || 'System'}
+                      </span>
+                      <span>·</span>
+                      <span>{formatDistanceToNow(new Date(doc.created_at), { addSuffix: true })}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                    onClick={() => handleDownload(doc.file_path)}
+                  >
+                    <Download size={14} />
+                  </Button>
+                  {(isFinance || isAdmin) && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      disabled={deletingId === doc.id}
+                      onClick={() => handleDeleteDocument(doc.id, doc.file_path)}
+                    >
+                      {deletingId === doc.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Claim review sheet (Finance only) */}
       <Sheet open={!!selectedClaimId} onOpenChange={v => !v && setSelectedClaimId(null)}>
